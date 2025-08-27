@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
@@ -383,6 +384,25 @@ def show_presentation_section(df, features, presentation_data, best_params):
     for idx, (_, row) in enumerate(top_10_features.iterrows(), 1):
         st.write(f"{idx}. **{row['feature']}**: {row['importance']:.4f}")
     
+    
+    # Representação Escolhida
+    st.subheader("🎨 Representação Escolhida")
+    st.markdown(f"""
+    **Estratégia de Seleção de Colunas:**
+    
+    - **Total de features originais**: {len(presentation_data['feature_cols'])} variáveis
+    - **Features selecionadas**: {len(features)} variáveis
+    - **Critério**: Combinação de conhecimento de domínio + importância estatística
+    
+    **Colunas Consideradas no Modelo Final:**
+    """)
+    
+    for i, feature in enumerate(features, 1):
+        importance_score = presentation_data['feature_importance'][
+            presentation_data['feature_importance']['feature'] == feature
+        ]['importance'].iloc[0]
+        st.write(f"{i}. `{feature}` (importância: {importance_score:.4f})")
+    
     # Matriz de Confusão
     st.subheader("📊 Matriz de Confusão")
     
@@ -423,24 +443,6 @@ def show_presentation_section(df, features, presentation_data, best_params):
         st.write(f"🎯 **Precisão**: {precision:.3f}")
         st.write(f"📈 **Recall (Sensibilidade)**: {recall:.3f}")
         st.write(f"🔍 **Especificidade**: {specificity:.3f}")
-    
-    # Representação Escolhida
-    st.subheader("🎨 Representação Escolhida")
-    st.markdown(f"""
-    **Estratégia de Seleção de Colunas:**
-    
-    - **Total de features originais**: {len(presentation_data['feature_cols'])} variáveis
-    - **Features selecionadas**: {len(features)} variáveis
-    - **Critério**: Combinação de conhecimento de domínio + importância estatística
-    
-    **Colunas Consideradas no Modelo Final:**
-    """)
-    
-    for i, feature in enumerate(features, 1):
-        importance_score = presentation_data['feature_importance'][
-            presentation_data['feature_importance']['feature'] == feature
-        ]['importance'].iloc[0]
-        st.write(f"{i}. `{feature}` (importância: {importance_score:.4f})")
     
     # Treinamento
     st.subheader("🧠 Treinamento")
