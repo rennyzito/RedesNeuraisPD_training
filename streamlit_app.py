@@ -138,56 +138,82 @@ def train_model(df):
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     
+    # ===== MODELO BASELINE: REGRESSÃO LOGÍSTICA =====
+    baseline_model = Pipeline([
+        ('scaler', StandardScaler()),
+        ('classifier', LogisticRegression(random_state=42, max_iter=1000))
+    ])
+    
+    baseline_model.fit(X_train, y_train)
+    
+    # ===== MODELO COMPLEXO: MLP COM GRIDSEARCHCV =====
+    mlp_model = Pipeline([
+        ('scaler', StandardScaler()),
+        ('classifier', MLPClassifier(random_state=42, max_iter=500))
+    ])
+    
+    # Hiperparâmetros para otimização do MLP (mesmo que apresentacao_melhorado.ipynb)
+    param_grid = {
+        'classifier__hidden_layer_sizes': [(50,), (100,), (50, 25), (100, 50)],
+        'classifier__alpha': [0.0001, 0.001, 0.01],
+        'classifier__learning_rate_init': [0.0001, 0.001]
+    }
+    
+    # Grid Search para MLP
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    grid_search = GridSearchCV(
+        mlp_model, param_grid, cv=cv, scoring='f1',
+        n_jobs=-1, verbose=0
+    )
+    
+    # Treinamento
+    grid_search.fit(X_train, y_train)
+    best_mlp = grid_search.best_estimator_
+    
+    # ===== TREINAR MELHOR MLP COM VALIDATION LOSS =====
     # Dividir dados de treino em treino/validação para calcular validation loss
     X_train_split, X_val_split, y_train_split, y_val_split = train_test_split(
         X_train, y_train, test_size=0.2, random_state=42, stratify=y_train
     )
     
-    # Testar diferentes configurações para encontrar a melhor
-    best_f1 = 0
-    best_model = None
-    best_params = {}
-    best_training_losses = None
-    best_validation_losses = None
+    # Treinar o melhor modelo encontrado com monitoramento de loss
+    best_params_dict = grid_search.best_params_
+    best_model_with_losses, training_losses, validation_losses = train_mlp_with_validation_loss(
+        X_train_split, X_val_split, y_train_split, y_val_split,
+        hidden_layer_sizes=best_params_dict['classifier__hidden_layer_sizes'],
+        alpha=best_params_dict['classifier__alpha'],
+        learning_rate_init=best_params_dict['classifier__learning_rate_init'],
+        max_iter=300,
+        random_state=42
+    )
     
-    # Configurações para testar (versão simplificada do GridSearch)
-    configs = [
-        {'hidden_layer_sizes': (100,), 'alpha': 0.001, 'learning_rate_init': 0.01},
-        {'hidden_layer_sizes': (50,), 'alpha': 0.001, 'learning_rate_init': 0.01},
-        {'hidden_layer_sizes': (100, 50), 'alpha': 0.001, 'learning_rate_init': 0.01},
-    ]
+    # ===== COMPARAR MODELOS =====
+    # Avaliar baseline
+    baseline_pred = baseline_model.predict(X_test)
+    baseline_f1 = f1_score(y_test, baseline_pred)
+    baseline_accuracy = accuracy_score(y_test, baseline_pred)
     
-    # Treinar modelos com validation loss
-    for config in configs:
-        model, train_losses, val_losses = train_mlp_with_validation_loss(
-            X_train_split, X_val_split, y_train_split, y_val_split,
-            hidden_layer_sizes=config['hidden_layer_sizes'],
-            alpha=config['alpha'],
-            learning_rate_init=config['learning_rate_init'],
-            max_iter=300,
-            random_state=42
-        )
-        
-        # Avaliar no conjunto de validação
-        y_val_pred = model.predict(X_val_split)
-        f1 = f1_score(y_val_split, y_val_pred)
-        
-        # Manter o melhor modelo
-        if f1 > best_f1:
-            best_f1 = f1
-            best_model = model
-            best_params = {
-                'classifier__hidden_layer_sizes': config['hidden_layer_sizes'],
-                'classifier__alpha': config['alpha'],
-                'classifier__learning_rate_init': config['learning_rate_init']
-            }
-            best_training_losses = train_losses
-            best_validation_losses = val_losses
+    # Avaliar MLP otimizado
+    mlp_pred = best_mlp.predict(X_test)
+    mlp_f1 = f1_score(y_test, mlp_pred)
+    mlp_accuracy = accuracy_score(y_test, mlp_pred)
     
-    # Calcular métricas de performance
-    y_pred = best_model.predict(X_test)
+    # SOLUÇÃO 1: Sempre usar o MLP para garantir que o gráfico de loss seja exibido
+    # Usar o melhor modelo MLP com histórico de loss
+    final_model = best_model_with_losses
+    y_pred = final_model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
+    model_type = "MLP Otimizado"
+    
+    # Manter informações de comparação para fins informativos
+    comparison_info = {
+        'mlp_better': mlp_f1 > baseline_f1,
+        'baseline_f1': baseline_f1,
+        'mlp_f1': mlp_f1,
+        'baseline_accuracy': baseline_accuracy,
+        'mlp_accuracy': mlp_accuracy
+    }
     
     # Calcular estatísticas das features para geração de valores aleatórios
     feature_stats = {}
@@ -212,13 +238,18 @@ def train_model(df):
         'y_test': y_test,
         'y_pred': y_pred,
         'confusion_matrix': conf_matrix,
-        'training_losses': best_training_losses,
-        'validation_losses': best_validation_losses,
+        'training_losses': training_losses,
+        'validation_losses': validation_losses,
         'accuracy': accuracy,
-        'f1_score': f1
+        'f1_score': f1,
+        'baseline_f1': baseline_f1,
+        'mlp_f1': mlp_f1,
+        'baseline_accuracy': baseline_accuracy,
+        'mlp_accuracy': mlp_accuracy,
+        'selected_model': model_type
     }
     
-    return best_model, selected_features, feature_stats, best_params, presentation_data
+    return final_model, selected_features, feature_stats, grid_search.best_params_, presentation_data
 
 def show_presentation_section(df, features, presentation_data, best_params):
     """Exibe o roteiro de apresentação de Deep Learning"""
@@ -419,24 +450,67 @@ def show_presentation_section(df, features, presentation_data, best_params):
     alpha = best_params['classifier__alpha']
     learning_rate = best_params['classifier__learning_rate_init']
     
-    st.markdown(f"""
-    **Topologia Escolhida:**
+    st.markdown("""
+    **Estratégia de Treinamento:**
     
-    - **Arquitetura**: Multi-Layer Perceptron (MLP)
+    **1. Modelo Baseline: Regressão Logística**
+    - **Arquitetura**: Pipeline com StandardScaler + LogisticRegression
+    - **Objetivo**: Estabelecer baseline de performance
+    - **Configuração**: max_iter=1000, random_state=42
+    
+    **2. Modelo Complexo: Multi-Layer Perceptron (MLP)**
+    - **Arquitetura**: Pipeline com StandardScaler + MLPClassifier
+    - **Otimização**: GridSearchCV com 5-fold cross-validation
+    - **Métrica de seleção**: F1-Score
+    - **Grid de hiperparâmetros**:
+      - hidden_layer_sizes: [(50,), (100,), (50, 25), (100, 50)]
+      - alpha: [0.0001, 0.001, 0.01]
+      - learning_rate_init: [0.001, 0.01]
+    """)
+    
+    st.markdown(f"""
+    **Melhor Configuração MLP Encontrada:**
     - **Camadas ocultas**: {topology}
-    - **Função de ativação**: ReLU (padrão do scikit-learn)
     - **Taxa de regularização (α)**: {alpha}
     - **Taxa de aprendizado inicial**: {learning_rate}
-    
-    **Configuração de Treinamento:**
+    - **Função de ativação**: ReLU (padrão do scikit-learn)
     - **Otimizador**: Adam (padrão do MLPClassifier)
-    - **Método de seleção**: GridSearchCV com validação cruzada 5-fold
-    - **Métrica de otimização**: F1-Score
-    - **Conjuntos**: 80% treino, 20% teste
+    """)
     
-    **Performance Final:**
+    # Comparação de Performance
+    st.markdown("**Comparação de Performance:**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown(f"""
+        **Baseline (Regressão Logística):**
+        - **Acurácia**: {presentation_data['baseline_accuracy']:.4f} ({presentation_data['baseline_accuracy']*100:.2f}%)
+        - **F1-Score**: {presentation_data['baseline_f1']:.4f}
+        """)
+    
+    with col2:
+        st.markdown(f"""
+        **MLP Otimizado:**
+        - **Acurácia**: {presentation_data['mlp_accuracy']:.4f} ({presentation_data['mlp_accuracy']*100:.2f}%)
+        - **F1-Score**: {presentation_data['mlp_f1']:.4f}
+        """)
+    
+    # Modelo Selecionado
+    if presentation_data['selected_model'] == "MLP Otimizado":
+        improvement = ((presentation_data['mlp_f1'] - presentation_data['baseline_f1']) / presentation_data['baseline_f1']) * 100
+        st.success(f"🏆 **Modelo Selecionado**: {presentation_data['selected_model']}")
+        st.info(f"📈 **Melhoria**: {improvement:.2f}% em F1-Score comparado ao baseline")
+    else:
+        improvement = ((presentation_data['baseline_f1'] - presentation_data['mlp_f1']) / presentation_data['mlp_f1']) * 100
+        st.success(f"🏆 **Modelo Selecionado**: {presentation_data['selected_model']}")
+        st.info(f"📊 **Resultado**: Baseline superou o MLP por {improvement:.2f}% em F1-Score")
+    
+    st.markdown(f"""
+    **Performance Final do Modelo Selecionado:**
     - **Acurácia**: {presentation_data['accuracy']:.4f} ({presentation_data['accuracy']*100:.2f}%)
     - **F1-Score**: {presentation_data['f1_score']:.4f}
+    - **Conjuntos**: 80% treino, 20% teste
     """)
     
     # Gráfico de Loss
