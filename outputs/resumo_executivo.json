@@ -1,0 +1,36 @@
+{
+  "project_info": {
+    "members": [
+      "Membro 1",
+      "Membro 2",
+      "Membro 3"
+    ],
+    "problem_type": "Binary Classification",
+    "target": "blueWins",
+    "dataset_size": 9879
+  },
+  "best_model": "Baseline (LogReg)",
+  "performance_summary": {
+    "Baseline (LogReg)": {
+      "accuracy": 0.7196356275303644,
+      "precision": 0.719959266802444,
+      "recall": 0.7170385395537525,
+      "f1": 0.7184959349593496,
+      "roc_auc": 0.800965025508636
+    },
+    "MLP Otimizado": {
+      "accuracy": 0.7145748987854251,
+      "precision": 0.7170781893004116,
+      "recall": 0.7068965517241379,
+      "f1": 0.7119509703779366,
+      "roc_auc": 0.8003360173745568
+    }
+  },
+  "mlp_best_params": {
+    "classifier__alpha": 0.01,
+    "classifier__hidden_layer_sizes": [
+      100
+    ],
+    "classifier__learning_rate_init": 0.01
+  }
+}
